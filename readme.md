@@ -5,6 +5,10 @@ This project generates release notes for the AI module and other modules, based 
 ## Installation
 1. Clone this repository.
 2. Run `composer install` to install dependencies.
+3. Install chromium or chrome on your system, this is required for the headless browser to work. On Ubuntu you can run:
+   ```bash
+   sudo apt install chromium-browser
+   ```
 
 ## Usage
 Example is based on the AI module, change accordingly for other modules. In this example we will generate release notes for the AI 1.1.8 release.
