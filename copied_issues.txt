@@ -1,3 +1,0 @@
-#3535537 - Add filename token description to AI Image Alt Text settings form
-#3560009
-#3513754
