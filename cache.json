@@ -1,0 +1,41 @@
+{
+    "issues": [
+        {
+            "issue_number": "3535537",
+            "title": "Filename for Added Context",
+            "url": "https://www.drupal.org/project/ai_image_alt_text/issues/3535537",
+            "category": "3"
+        },
+        {
+            "issue_number": "3560009",
+            "title": "Warning messages are not shown in the modal while generating alt text with AI",
+            "url": "https://www.drupal.org/project/ai_image_alt_text/issues/3560009",
+            "category": "1"
+        },
+        {
+            "issue_number": "3513754",
+            "title": "PHP8.4: nullable is deprecated",
+            "url": "https://www.drupal.org/project/ai_image_alt_text/issues/3513754",
+            "category": "1"
+        }
+    ],
+    "contributors": {
+        "nicholass": 1,
+        "marcus_johansson": 3,
+        "utkarsh_33": 1,
+        "narendrar": 1,
+        "kunal.sachdev": 1,
+        "danharper": 1,
+        "anjaliprasannan": 1,
+        "svendecabooter": 1
+    },
+    "organizations": {
+        "FreelyGive": 3,
+        "Acquia": 1,
+        "hrpr": 1,
+        "QED42": 1,
+        "Sven Decabooter": 1,
+        "EntityOne": 1,
+        "Make It Fly": 1
+    }
+}
