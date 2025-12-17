@@ -21,7 +21,7 @@ Example is based on the AI module, change accordingly for other modules. In this
 6. (Or) use `git log` to get the commit messages between two tags and extract the issue numbers into copied_issues.txt.
 7. Run the script to get release notes:
    ```bash
-   php generate_release_notes.php
+   php get_release_notes.php
    ```
 8. This will create a cache.json file to speed up future writing.
 9. The release notes will be printed to the console. You need to specify project, previous version and if you want plain text for a release or html for the publishing - in this example we want plain text:
