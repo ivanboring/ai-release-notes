@@ -45,7 +45,7 @@ if (file_exists('cache.json')) {
   if ($with_html) {
     $text = '<p>Issues resolved since <a href="https://www.drupal.org/project/' . $project . '/releases/' . $from . '">' . $from . '</a>: ' . count($issues) . '</p>';
     // The actual output.
-    $text .= "<h2>Contributors</h2>\n";
+    $text .= "<h3>Contributors</h3>\n";
     $contrib_text = [];
     foreach ($contributors as $contributor => $count) {
       $contrib_text[] = '<a href="https://www.drupal.org/u/' . $contributor . '">' . $contributor . '</a> (' . $count . ')';
