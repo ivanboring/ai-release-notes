@@ -55,7 +55,7 @@ if (file_exists('cache.json')) {
     // Sort the issues by category.
     $sorted_issues = [];
     foreach ($issues as $issue) {
-      $sorted_issues[$issue['category']][] = '<li><a href="' . $issue['url'] . '">#' . $issue['issue_number'] . '</a> ' . $issue['title'] . '</li>';
+      $sorted_issues[$issue['category']][] = '<li>[#' . $issue['issue_number'] . ']</li>';
     }
 
     foreach ($mapping as $key => $category) {
