@@ -59,16 +59,35 @@ if (file_exists('cache.json')) {
           unset($issues[$key]);
           continue;
         }
-        $users = [];
+        $actual_orgs = [];
         foreach ($credit_response['included'] as $included) {
           // First look through the paragraph--contributor for approved credits.
           if ($included['type'] === 'paragraph--contributor') {
-            if (isset($included['attributes']['field_credit_this_contributor']) && $included['attributes']['field_credit_this_contributor'] === TRUE &&
-              isset($included['relationships']['field_contributor_user']['data']['id'])) {
-              $users[] = $included['relationships']['field_contributor_user']['data']['id'];
+            if (isset($included['attributes']['field_credit_this_contributor']) && $included['attributes']['field_credit_this_contributor'] === TRUE) {
+              if (isset($included['relationships']['field_contributor_user']['data']['id'])) {
+                $users[] = $included['relationships']['field_contributor_user']['data']['id'];
+              }
+              // Also credit organizations if they should be.
+              if (isset($included['attributes']['field_contributor_attribute_orgs']) && $included['attributes']['field_contributor_attribute_orgs'] === TRUE) {
+                if (isset($included['relationships']['field_contributor_customer']['data'])) {
+                  foreach ($included['relationships']['field_contributor_customer']['data'] as $customer) {
+                    if (isset($customer['id'])) {
+                      $actual_orgs[] = $customer['id'];
+                    }
+                  }
+                }
+                if (isset($included['relationships']['field_contributor_organisation']['data'])) {
+                  foreach ($included['relationships']['field_contributor_organisation']['data'] as $org) {
+                    if (isset($org['id'])) {
+                      $actual_orgs[] = $org['id'];
+                    }
+                  }
+                }
+              }
             }
           }
         }
+        $organizations = [];
         foreach ($credit_response['included'] as $included) {
           if ($included['type'] === 'user--user' && in_array($included['id'], $users)) {
             // If the user already exists in the round, skip it.
@@ -87,7 +106,7 @@ if (file_exists('cache.json')) {
             }
             $round[$included['attributes']['name']] = TRUE;
           }
-          if ($included['type'] === 'node--organization') {
+          if ($included['type'] === 'node--organization' && in_array($included['id'], $actual_orgs)) {
             if (!isset($organizations[$included['attributes']['title']])) {
               if (!isset($org_issue[$included['attributes']['title']])) {
                 $organizations[$included['attributes']['title']] = 1;
@@ -100,7 +119,7 @@ if (file_exists('cache.json')) {
               }
             }
           }
-          if ($included['type'] === 'node--customer') {
+          if ($included['type'] === 'node--customer' && in_array($included['id'], $actual_orgs)) {
             if (!isset($organizations[$included['attributes']['title']])) {
               if (!isset($org_issue[$included['attributes']['title']])) {
                 $organizations[$included['attributes']['title']] = 1;
@@ -163,17 +182,35 @@ foreach (explode("\n", $data) as $key => $line) {
       continue;
     }
     $users = [];
+    $actual_orgs = [];
     foreach ($credit_response['included'] as $included) {
       // First look through the paragraph--contributor for approved credits.
       if ($included['type'] === 'paragraph--contributor') {
-        if (
-          isset($included['attributes']['field_credit_this_contributor']) && $included['attributes']['field_credit_this_contributor'] === TRUE &&
-          isset($included['relationships']['field_contributor_user']['data']['id'])
-        ) {
-          $users[] = $included['relationships']['field_contributor_user']['data']['id'];
+        if (isset($included['attributes']['field_credit_this_contributor']) && $included['attributes']['field_credit_this_contributor'] === TRUE) {
+          if (isset($included['relationships']['field_contributor_user']['data']['id'])) {
+            $users[] = $included['relationships']['field_contributor_user']['data']['id'];
+          }
+          // Also credit organizations if they should be.
+          if (isset($included['attributes']['field_contributor_attribute_orgs']) && $included['attributes']['field_contributor_attribute_orgs'] === TRUE) {
+            if (isset($included['relationships']['field_contributor_customer']['data'])) {
+              foreach ($included['relationships']['field_contributor_customer']['data'] as $customer) {
+                if (isset($customer['id'])) {
+                  $actual_orgs[] = $customer['id'];
+                }
+              }
+            }
+            if (isset($included['relationships']['field_contributor_organisation']['data'])) {
+              foreach ($included['relationships']['field_contributor_organisation']['data'] as $org) {
+                if (isset($org['id'])) {
+                  $actual_orgs[] = $org['id'];
+                }
+              }
+            }
+          }
         }
       }
     }
+    $organizations = [];
     foreach ($credit_response['included'] as $included) {
       if ($included['type'] === 'user--user' && in_array($included['id'], $users)) {
         // If the user already exists in the round, skip it.
@@ -192,7 +229,7 @@ foreach (explode("\n", $data) as $key => $line) {
         }
         $round[$included['attributes']['name']] = TRUE;
       }
-      if ($included['type'] === 'node--organization') {
+      if ($included['type'] === 'node--organization' && in_array($included['id'], $actual_orgs)) {
         if (!isset($organizations[$included['attributes']['title']])) {
           if (!isset($org_issue[$included['attributes']['title']])) {
             $organizations[$included['attributes']['title']] = 1;
@@ -206,7 +243,7 @@ foreach (explode("\n", $data) as $key => $line) {
           }
         }
       }
-      if ($included['type'] === 'node--customer') {
+      if ($included['type'] === 'node--customer' && in_array($included['id'], $actual_orgs)) {
         if (!isset($organizations[$included['attributes']['title']])) {
           if (!isset($org_issue[$included['attributes']['title']])) {
             $organizations[$included['attributes']['title']] = 1;
