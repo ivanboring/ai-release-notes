@@ -59,8 +59,18 @@ if (file_exists('cache.json')) {
           unset($issues[$key]);
           continue;
         }
+        $users = [];
         foreach ($credit_response['included'] as $included) {
-          if ($included['type'] === 'user--user') {
+          // First look through the paragraph--contributor for approved credits.
+          if ($included['type'] === 'paragraph--contributor') {
+            if (isset($included['attributes']['field_credit_this_contributor']) && $included['attributes']['field_credit_this_contributor'] === TRUE &&
+              isset($included['relationships']['field_contributor_user']['data']['id'])) {
+              $users[] = $included['relationships']['field_contributor_user']['data']['id'];
+            }
+          }
+        }
+        foreach ($credit_response['included'] as $included) {
+          if ($included['type'] === 'user--user' && in_array($included['id'], $users)) {
             // If the user already exists in the round, skip it.
             if (isset($round[$included['attributes']['name']])) {
               continue;
@@ -71,7 +81,8 @@ if (file_exists('cache.json')) {
             }
             if (!isset($contributors[$included['attributes']['name']])) {
               $contributors[$included['attributes']['name']] = 1;
-            } else {
+            }
+            else {
               $contributors[$included['attributes']['name']]++;
             }
             $round[$included['attributes']['name']] = TRUE;
@@ -151,8 +162,20 @@ foreach (explode("\n", $data) as $key => $line) {
       unset($issues[$key]);
       continue;
     }
+    $users = [];
     foreach ($credit_response['included'] as $included) {
-      if ($included['type'] === 'user--user') {
+      // First look through the paragraph--contributor for approved credits.
+      if ($included['type'] === 'paragraph--contributor') {
+        if (
+          isset($included['attributes']['field_credit_this_contributor']) && $included['attributes']['field_credit_this_contributor'] === TRUE &&
+          isset($included['relationships']['field_contributor_user']['data']['id'])
+        ) {
+          $users[] = $included['relationships']['field_contributor_user']['data']['id'];
+        }
+      }
+    }
+    foreach ($credit_response['included'] as $included) {
+      if ($included['type'] === 'user--user' && in_array($included['id'], $users)) {
         // If the user already exists in the round, skip it.
         if (isset($round[$included['attributes']['name']])) {
           continue;
