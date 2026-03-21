@@ -87,7 +87,6 @@ if (file_exists('cache.json')) {
             }
           }
         }
-        $organizations = [];
         foreach ($credit_response['included'] as $included) {
           if ($included['type'] === 'user--user' && in_array($included['id'], $users)) {
             // If the user already exists in the round, skip it.
@@ -112,7 +111,8 @@ if (file_exists('cache.json')) {
                 $organizations[$included['attributes']['title']] = 1;
                 $org_issue[$included['attributes']['title']] = TRUE;
               }
-            } else {
+            }
+            else {
               if (!isset($org_issue[$included['attributes']['title']])) {
                 $organizations[$included['attributes']['title']]++;
                 $org_issue[$included['attributes']['title']] = TRUE;
@@ -125,7 +125,8 @@ if (file_exists('cache.json')) {
                 $organizations[$included['attributes']['title']] = 1;
                 $org_issue[$included['attributes']['title']] = TRUE;
               }
-            } else {
+            }
+            else {
               if (!isset($org_issue[$included['attributes']['title']])) {
                 $organizations[$included['attributes']['title']]++;
                 $org_issue[$included['attributes']['title']] = TRUE;
@@ -210,7 +211,6 @@ foreach (explode("\n", $data) as $key => $line) {
         }
       }
     }
-    $organizations = [];
     foreach ($credit_response['included'] as $included) {
       if ($included['type'] === 'user--user' && in_array($included['id'], $users)) {
         // If the user already exists in the round, skip it.
