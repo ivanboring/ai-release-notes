@@ -5,27 +5,61 @@ This project generates release notes for the AI module and other modules, based 
 ## Installation
 1. Clone this repository.
 2. Run `composer install` to install dependencies.
-3. Install chromium or chrome on your system, this is required for the headless browser to work. On Ubuntu you can run:
-   ```bash
-   sudo apt install chromium-browser
-   ```
 
 ## Usage
-Example is based on the AI module, change accordingly for other modules. In this example we will generate release notes for the AI 1.1.8 release.
+Example is based on the AI module. Change the project and versions for other modules.
 
-1. Go to https://git.drupalcode.org/project/ai and click on code >> compare revisions.
-2. In the Source version select the main version branch, in this case "1.1.x".
-3. In the Target version select the last release, in this case "1.1.7".
-4. Click on compare and you will be given a list of all commits since the last release.
-5. Copy all the issue numbers from the commit messages into a text file called copied_issues.txt, one issue number per line.
-6. (Or) use `git log` to get the commit messages between two tags and extract the issue numbers into copied_issues.txt.
-7. Run the script to get release notes:
+In this example we generate notes for changes from `1.3.3` to `1.4.x`.
+
+1. Fetch issue data from GitLab and Drupal.org:
    ```bash
-   php get_release_notes.php
+   php get_release_notes.php ai 1.3.3 1.4.x
    ```
-8. This will create a cache.json file to speed up future writing.
-9. The release notes will be printed to the console. You need to specify project, previous version and if you want plain text for a release or html for the publishing - in this example we want plain text:
+
+   This creates `cache.json` with issues, contributors, and organizations.
+
+   The script uses the GitLab compare API:
+   ```text
+   https://git.drupalcode.org/api/v4/projects/project%2Fai/repository/compare?from=1.3.3&to=1.4.x
+   ```
+
+   For every commit, it extracts a Drupal issue number from `#1234567`, loads the matching GitLab work item, and stores the work item URL:
+   ```text
+   https://git.drupalcode.org/project/ai/-/work_items/1234567
+   ```
+
+2. Write plain text release notes:
    ```bash
-   php write_release_notes.php ai 1.1.7
+   php write_release_notes.php ai 1.3.3
    ```
-10. When you are finished, you can delete the copied_issues.txt and cache.json files.
+
+3. Or write HTML release notes for publishing:
+   ```bash
+   php write_release_notes.php ai 1.3.3 1
+   ```
+
+   HTML output links issue titles to their GitLab work item pages.
+
+4. When you are finished, you can delete `cache.json`.
+
+## Arguments
+
+`get_release_notes.php`:
+
+```bash
+php get_release_notes.php [project] [from] [to]
+```
+
+- `project`: Drupal GitLab project name, for example `ai`. You can also pass a full path such as `project/ai`.
+- `from`: Previous release/tag/ref.
+- `to`: Target release/tag/ref or branch.
+
+`write_release_notes.php`:
+
+```bash
+php write_release_notes.php [project] [last_version] [with_html]
+```
+
+- `project`: Drupal.org project name, for example `ai`.
+- `last_version`: Previous release version used in the release notes intro link.
+- `with_html`: Optional. Pass a truthy value such as `1` to generate HTML.

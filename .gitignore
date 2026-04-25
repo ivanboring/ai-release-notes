@@ -1,3 +1,5 @@
 vendor
 copied_issues.txt
 cache.json
+.claude
+.codex

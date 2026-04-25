@@ -17,15 +17,6 @@ if (!$project || !$version) {
 
 $from = $version;
 
-
-try {
-  $data = file_get_contents('copied_issues.txt');
-}
-catch (Exception $e) {
-  echo "Error reading file: " . $e->getMessage();
-  exit(1);
-}
-
 $mapping = [
   3 => 'New Features',
   2 => 'Tasks',
@@ -55,7 +46,7 @@ if (file_exists('cache.json')) {
     // Sort the issues by category.
     $sorted_issues = [];
     foreach ($issues as $issue) {
-      $sorted_issues[$issue['category']][] = '<li>[#' . $issue['issue_number'] . ']</li>';
+      $sorted_issues[$issue['category']][] = '<li>' . format_issue_html($issue) . '</li>';
     }
 
     foreach ($mapping as $key => $category) {
@@ -104,3 +95,18 @@ if (file_exists('cache.json')) {
 }
 
 echo $text;
+
+function format_issue_html(array $issue): string {
+  $title = $issue['title'] ?? ('#' . ($issue['issue_number'] ?? ''));
+  $url = $issue['url'] ?? '';
+
+  if ($url) {
+    return '<a href="' . html_escape($url) . '">' . html_escape($title) . '</a>';
+  }
+
+  return html_escape($title);
+}
+
+function html_escape(string $text): string {
+  return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
