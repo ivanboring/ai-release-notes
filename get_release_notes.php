@@ -194,8 +194,48 @@ function find_issue_number_from_commit_details(string $encoded_project, array $c
   }
 
   if (!empty($commit['web_url'])) {
-    $web_page = fetch_text($commit['web_url']);
-    return extract_issue_number($web_page);
+    $issue_number = extract_issue_number(fetch_text($commit['web_url']));
+    if ($issue_number) {
+      return $issue_number;
+    }
+  }
+
+  if (!empty($commit['id'])) {
+    $issue_number = find_issue_number_from_mr($encoded_project, $commit['id']);
+    if ($issue_number) {
+      return $issue_number;
+    }
+  }
+
+  return NULL;
+}
+
+function find_issue_number_from_mr(string $encoded_project, string $commit_sha): ?string {
+  $mrs_url = 'https://git.drupalcode.org/api/v4/projects/' . $encoded_project . '/repository/commits/' . rawurlencode($commit_sha) . '/merge_requests';
+  $mrs = fetch_json($mrs_url);
+  if (!is_array($mrs)) {
+    return NULL;
+  }
+
+  foreach ($mrs as $mr) {
+    $mr_iid = $mr['iid'] ?? NULL;
+    if (!$mr_iid) {
+      continue;
+    }
+
+    $closes_url = 'https://git.drupalcode.org/api/v4/projects/' . $encoded_project . '/merge_requests/' . rawurlencode($mr_iid) . '/closes_issues';
+    $closed_issues = fetch_json($closes_url);
+    if (!is_array($closed_issues)) {
+      continue;
+    }
+
+    foreach ($closed_issues as $issue) {
+      $iid = $issue['iid'] ?? NULL;
+      if ($iid) {
+        echo "Found issue #$iid via MR !$mr_iid for commit $commit_sha\n";
+        return (string) $iid;
+      }
+    }
   }
 
   return NULL;
