@@ -34,11 +34,12 @@ In this example we generate notes for changes from `1.3.3` to `1.4.x`.
    https://git.drupalcode.org/project/ai/-/work_items/1234567
    ```
 
-2. Check the console output for any lines like:
+2. Check the console output for any `WARNING` lines:
    ```text
-   No issue number found for commit: <commit title>
+   WARNING: No issue number found for commit: "<commit title>". If this commit belongs to a valid issue, add it manually: php add_issue.php ai <issue_number>
+   WARNING: Could not resolve a valid title for issue #3575845 (the issue may not exist in this project or the page returned an error). If this is a valid issue, add it manually: php add_issue.php ai 3575845
    ```
-   If you see these, the script could not resolve an issue for that commit. Find the correct issue number (e.g. from the GitLab MR or commit page) and add it manually:
+   These mean the script could not automatically link a commit to an issue — either no `#number` was found, or the work item lookup failed (e.g. a Cloudflare challenge page was returned instead of the real issue). Find the correct issue number from the GitLab MR or commit page and run the exact command shown in the warning:
    ```bash
    php add_issue.php ai 3578472
    ```

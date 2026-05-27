@@ -171,8 +171,16 @@ function fetch_work_item(string $encoded_project, string $work_item_url, string 
   }
 
   $work_item_page = fetch_text($work_item_url);
+  $title = extract_html_title($work_item_page);
+
+  // Reject titles that are Cloudflare or auth error pages, not real issues.
+  $error_titles = ['Client Challenge', 'Just a moment...', 'Access denied', 'Attention Required', '403 Forbidden', '404 Not Found'];
+  if (in_array($title, $error_titles, TRUE)) {
+    return ['title' => '', 'labels' => []];
+  }
+
   return [
-    'title' => extract_html_title($work_item_page),
+    'title' => $title,
     'labels' => extract_category_labels_from_text($work_item_page),
   ];
 }

@@ -42,7 +42,7 @@ foreach ($compare['commits'] as $commit) {
   }
 
   if (!$issue_number) {
-    echo "No issue number found for commit: $title\n";
+    echo "WARNING: No issue number found for commit: \"$title\". If this commit belongs to a valid issue, add it manually: php add_issue.php $project <issue_number>\n";
     continue;
   }
 
@@ -56,7 +56,7 @@ foreach ($compare['commits'] as $commit) {
   $work_item = fetch_work_item($encoded_project, $work_item_url, $issue_number);
   $title = $work_item['title'] ?? '';
   if ($title === '') {
-    echo "No title found for work item #$issue_number, skipping.\n";
+    echo "WARNING: Could not resolve a valid title for issue #$issue_number (the issue may not exist in this project or the page returned an error). If this is a valid issue, add it manually: php add_issue.php $project $issue_number\n";
     continue;
   }
 
