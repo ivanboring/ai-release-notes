@@ -6,13 +6,25 @@ include('vendor/autoload.php');
  * Script to fetch and cache Drupal release notes from a GitLab compare range.
  */
 
-$project = $argv[1] ?? '';
-$from = $argv[2] ?? '';
-$to = $argv[3] ?? '';
+$positional = [];
+$exclude_ranges = [];
+
+foreach (array_slice($argv, 1) as $argument) {
+  if (strpos($argument, '--exclude=') === 0) {
+    $exclude_ranges[] = substr($argument, strlen('--exclude='));
+    continue;
+  }
+  $positional[] = $argument;
+}
+
+$project = $positional[0] ?? '';
+$from = $positional[1] ?? '';
+$to = $positional[2] ?? '';
 
 if (!$project || !$from || !$to) {
-  echo "Usage: php get_release_notes.php [project] [from] [to]\n";
+  echo "Usage: php get_release_notes.php [project] [from] [to] [--exclude=from..to]\n";
   echo "Example: php get_release_notes.php ai 1.3.3 1.4.x\n";
+  echo "Example: php get_release_notes.php ai 1.4.0 1.5.x --exclude=1.4.0..1.4.x\n";
   exit(1);
 }
 
@@ -30,17 +42,55 @@ $organizations = [];
 $seen_issues = [];
 $project_path = normalize_project_path($project);
 $encoded_project = rawurlencode($project_path);
-$compare_url = 'https://git.drupalcode.org/api/v4/projects/' . $encoded_project . '/repository/compare?from=' . rawurlencode($from) . '&to=' . rawurlencode($to);
 
-echo "Fetching compare data: $compare_url\n";
-$compare = fetch_json($compare_url);
-
-if (!isset($compare['commits']) || !is_array($compare['commits'])) {
+$commits = fetch_compare_commits($encoded_project, $from, $to);
+if ($commits === NULL) {
   echo "Compare response did not include commits.\n";
   exit(1);
 }
 
-foreach ($compare['commits'] as $commit) {
+// Issues already shipped on an older branch. A commit cherry-picked from that
+// branch gets a new hash here, so hashes cannot be compared - the issue number
+// is the stable identity.
+$excluded_issues = [];
+foreach ($exclude_ranges as $exclude_range) {
+  if (strpos($exclude_range, '..') !== FALSE) {
+    $parts = explode('..', $exclude_range, 2);
+    if ($parts[0] === '' || $parts[1] === '') {
+      echo "Ignoring malformed --exclude range: $exclude_range (expected from..to or a ref)\n";
+      continue;
+    }
+    $exclude_commits = fetch_compare_commits($encoded_project, $parts[0], $parts[1]);
+  }
+  else {
+    // A bare ref means the whole history of that branch, so there is no lower
+    // bound to guess. A fix released in 1.4.0 is on 1.4.x just as much as one
+    // released in 1.4.3.
+    $exclude_commits = fetch_ref_commits($encoded_project, $exclude_range);
+  }
+
+  if ($exclude_commits === NULL) {
+    echo "Could not fetch exclude range $exclude_range, aborting.\n";
+    exit(1);
+  }
+
+  // Only the title and message are inspected here. Both survive a cherry-pick,
+  // and the per-commit lookup that the main loop falls back to would mean one
+  // request per commit across the whole branch.
+  foreach ($exclude_commits as $exclude_commit) {
+    $issue_number = extract_issue_number($exclude_commit['title'] ?? '');
+    if (!$issue_number) {
+      $issue_number = extract_issue_number($exclude_commit['message'] ?? '');
+    }
+    if ($issue_number) {
+      $excluded_issues[$issue_number] = TRUE;
+    }
+  }
+
+  echo "Excluding " . count($excluded_issues) . " issues already released in $exclude_range.\n";
+}
+
+foreach ($commits as $commit) {
   $title = $commit['title'] ?? '';
   $issue_number = extract_issue_number($title);
 
@@ -50,6 +100,11 @@ foreach ($compare['commits'] as $commit) {
 
   if (!$issue_number) {
     echo "No issue number found for commit: $title\n";
+    continue;
+  }
+
+  if (isset($excluded_issues[$issue_number])) {
+    echo "Issue #$issue_number already released in an excluded range, skipping.\n";
     continue;
   }
 
@@ -86,6 +141,49 @@ foreach ($compare['commits'] as $commit) {
 
 write_cache($issues, $contributors, $organizations);
 echo "Wrote cache.json with " . count($issues) . " issues.\n";
+
+function fetch_compare_commits(string $encoded_project, string $from, string $to): ?array {
+  $compare_url = 'https://git.drupalcode.org/api/v4/projects/' . $encoded_project . '/repository/compare?from=' . rawurlencode($from) . '&to=' . rawurlencode($to);
+
+  echo "Fetching compare data: $compare_url\n";
+  $compare = fetch_json($compare_url);
+
+  if (!isset($compare['commits']) || !is_array($compare['commits'])) {
+    return NULL;
+  }
+
+  return $compare['commits'];
+}
+
+function fetch_ref_commits(string $encoded_project, string $ref): ?array {
+  $commits = [];
+  $page = 1;
+
+  echo "Fetching full history of $ref\n";
+  while (TRUE) {
+    $url = 'https://git.drupalcode.org/api/v4/projects/' . $encoded_project . '/repository/commits?ref_name=' . rawurlencode($ref) . '&per_page=100&page=' . $page;
+    $batch = fetch_json($url);
+    if (!is_array($batch)) {
+      return NULL;
+    }
+    if (!$batch) {
+      break;
+    }
+
+    $commits = array_merge($commits, $batch);
+    if (count($batch) < 100) {
+      break;
+    }
+    $page++;
+  }
+
+  if (!$commits) {
+    return NULL;
+  }
+
+  echo "Found " . count($commits) . " commits on $ref\n";
+  return $commits;
+}
 
 function normalize_project_path(string $project): string {
   if (strpos($project, '/') !== FALSE) {
