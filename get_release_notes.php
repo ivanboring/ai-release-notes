@@ -53,6 +53,25 @@ if ($commits === NULL) {
 // branch gets a new hash here, so hashes cannot be compared - the issue number
 // is the stable identity.
 $excluded_issues = [];
+
+// A fix cherry-picked between $from and $to sits on both branches under
+// different hashes, so the compare above still lists it even though it is not
+// new in $to. The reverse compare lists exactly the commits that are on $from
+// but not on $to - the other half of each cherry-pick pair - so their issue
+// numbers mark what has already shipped on $from.
+$reverse_commits = fetch_compare_commits($encoded_project, $to, $from);
+if ($reverse_commits === NULL) {
+  echo "Could not fetch reverse compare $to..$from, aborting.\n";
+  exit(1);
+}
+foreach ($reverse_commits as $reverse_commit) {
+  $issue_number = extract_issue_number_from_commit($reverse_commit);
+  if ($issue_number) {
+    $excluded_issues[$issue_number] = TRUE;
+  }
+}
+echo "Excluding " . count($excluded_issues) . " issues already on $from.\n";
+
 foreach ($exclude_ranges as $exclude_range) {
   if (strpos($exclude_range, '..') !== FALSE) {
     $parts = explode('..', $exclude_range, 2);
@@ -78,10 +97,7 @@ foreach ($exclude_ranges as $exclude_range) {
   // and the per-commit lookup that the main loop falls back to would mean one
   // request per commit across the whole branch.
   foreach ($exclude_commits as $exclude_commit) {
-    $issue_number = extract_issue_number($exclude_commit['title'] ?? '');
-    if (!$issue_number) {
-      $issue_number = extract_issue_number($exclude_commit['message'] ?? '');
-    }
+    $issue_number = extract_issue_number_from_commit($exclude_commit);
     if ($issue_number) {
       $excluded_issues[$issue_number] = TRUE;
     }
@@ -255,6 +271,14 @@ function fetch_url(string $url, bool $use_browser_headers = TRUE): string {
   }
 
   return $response;
+}
+
+function extract_issue_number_from_commit(array $commit): ?string {
+  $issue_number = extract_issue_number($commit['title'] ?? '');
+  if (!$issue_number) {
+    $issue_number = extract_issue_number($commit['message'] ?? '');
+  }
+  return $issue_number;
 }
 
 function extract_issue_number(string $text): ?string {

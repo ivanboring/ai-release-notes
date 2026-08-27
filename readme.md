@@ -58,9 +58,17 @@ php get_release_notes.php [project] [from] [to] [--exclude=from..to]
 ### Excluding cherry-picked commits
 
 When you cherry-pick a fix from `1.4.x` into `1.5.x`, the commit gets a new hash,
-so the compare API reports it as a new commit in the `1.5.x` range and it ends up
-in the release notes twice. Hashes cannot be matched across a cherry-pick, but the
-Drupal issue number can, so pass the older branch to `--exclude`:
+so the compare API reports it as a new commit in the `1.5.x` range. Hashes cannot
+be matched across a cherry-pick, but the Drupal issue number can.
+
+The script handles this automatically for the two refs you compare: it also runs
+the compare in the reverse direction (`to..from`), which yields the commits that
+are on `from` but not on `to` - the other half of each cherry-pick pair - and
+skips their issue numbers. So `php get_release_notes.php ai 1.4.x 1.5.x` only
+lists issues that are new in `1.5.x`.
+
+Use `--exclude` when the work was also released on a branch that is not part of
+the compare:
 
 ```bash
 php get_release_notes.php ai 1.4.0 1.5.x --exclude=1.4.x
