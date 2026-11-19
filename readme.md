@@ -28,6 +28,17 @@ In this example we generate notes for changes from `1.3.3` to `1.4.x`.
    https://git.drupalcode.org/project/ai/-/work_items/1234567
    ```
 
+   Commits merged through the GitLab UI often have no `#1234567` in their
+   message. For those, the script looks up the merged merge request that brought
+   the commit in and takes the issue number from its issue fork branch name
+   (`1234567-some-fix`), title or description (`Closes #1234567`). Cherry-picks
+   are followed back to the original commit's merge request, both for
+   `git cherry-pick -x` messages and for `cherry-pick-<hash>` branches created
+   by the GitLab "Cherry-pick" button. All merged MRs are listed in bulk once; if
+   a commit is not a merge, squash or head commit of one of them, the commits of
+   every MR are fetched too, which takes a minute or two. Commits pushed directly
+   without an MR or issue reference are still skipped.
+
 2. Write plain text release notes:
    ```bash
    php write_release_notes.php ai 1.3.3

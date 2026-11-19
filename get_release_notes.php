@@ -64,8 +64,14 @@ if ($reverse_commits === NULL) {
   echo "Could not fetch reverse compare $to..$from, aborting.\n";
   exit(1);
 }
+
+// Many commits are merged through the GitLab UI without "#1234567" in the
+// message. Their merge request usually still carries it, in the issue fork
+// branch name ("3586683-fix-typo") or the description ("Closes #3586683").
+$mr_index = new MergeRequestIndex($encoded_project, array_merge($commits, $reverse_commits));
+
 foreach ($reverse_commits as $reverse_commit) {
-  $issue_number = extract_issue_number_from_commit($reverse_commit);
+  $issue_number = extract_issue_number_from_commit($reverse_commit) ?? $mr_index->issueNumberForCommit($reverse_commit);
   if ($issue_number) {
     $excluded_issues[$issue_number] = TRUE;
   }
@@ -108,7 +114,18 @@ foreach ($exclude_ranges as $exclude_range) {
 
 foreach ($commits as $commit) {
   $title = $commit['title'] ?? '';
-  $issue_number = extract_issue_number($title);
+  $issue_number = extract_issue_number($title) ?? extract_leading_issue_number($title);
+
+  if (!$issue_number) {
+    $issue_number = extract_issue_number($commit['message'] ?? '');
+  }
+
+  if (!$issue_number) {
+    $issue_number = $mr_index->issueNumberForCommit($commit);
+    if ($issue_number) {
+      echo "Found issue #$issue_number via merge request for commit: $title\n";
+    }
+  }
 
   if (!$issue_number) {
     $issue_number = find_issue_number_from_commit_details($encoded_project, $commit);
@@ -515,6 +532,190 @@ function relationship_ids(array $included, string $relationship): array {
   }
 
   return $ids;
+}
+
+/**
+ * Picks up titles such as "3586784: Let DecisionCapabilities declare...".
+ */
+function extract_leading_issue_number(string $text): ?string {
+  if (preg_match('/^(\d{6,})\b/', trim($text), $matches)) {
+    return $matches[1];
+  }
+  return NULL;
+}
+
+/**
+ * Maps commit hashes to the merged merge request that brought them in.
+ *
+ * GitLab's per-commit "merge_requests" endpoint is both slow (minutes per
+ * call on git.drupalcode.org) and noisy (it lists every MR whose branch ever
+ * contained the commit), so instead all merged MRs in the time window are
+ * listed in bulk and indexed by their merge, squash and head commit hashes.
+ * Commits from the middle of a multi-commit MR are only found after the
+ * commits of every MR are fetched, which is done lazily on the first miss.
+ */
+class MergeRequestIndex {
+
+  private string $encodedProject;
+  private string $updatedAfter;
+  private ?array $mergeRequests = NULL;
+  private array $bySha = [];
+  private bool $commitsIndexed = FALSE;
+
+  public function __construct(string $encoded_project, array $commits) {
+    $this->encodedProject = $encoded_project;
+
+    $oldest = time();
+    foreach ($commits as $commit) {
+      foreach (['authored_date', 'committed_date'] as $field) {
+        if (!empty($commit[$field]) && ($timestamp = strtotime($commit[$field])) !== FALSE) {
+          $oldest = min($oldest, $timestamp);
+        }
+      }
+    }
+    // A cherry-pick points at an original commit that can be older than
+    // anything in the range, so leave some room for its merge request.
+    $this->updatedAfter = gmdate('Y-m-d\TH:i:s\Z', $oldest - 90 * 86400);
+  }
+
+  public function issueNumberForCommit(array $commit): ?string {
+    if (empty($commit['id'])) {
+      return NULL;
+    }
+
+    $issue_number = $this->issueNumberForSha($commit['id']);
+    if ($issue_number) {
+      return $issue_number;
+    }
+
+    // "git cherry-pick -x" records where the commit came from.
+    if (preg_match('/cherry picked from commit ([0-9a-f]{40})/', $commit['message'] ?? '', $matches)) {
+      return $this->issueNumberForSha($matches[1]);
+    }
+
+    return NULL;
+  }
+
+  private function issueNumberForSha(string $sha, int $depth = 0): ?string {
+    $merge_request = $this->findBySha($sha);
+    if (!$merge_request) {
+      return NULL;
+    }
+
+    $issue_number = $this->issueNumberFromMergeRequest($merge_request);
+    if ($issue_number) {
+      return $issue_number;
+    }
+
+    // The GitLab "Cherry-pick" button creates a branch named after the short
+    // hash of the original commit, whose own merge request has the issue.
+    if ($depth < 3 && preg_match('/^cherry-pick-([0-9a-f]{7,40})/', $merge_request['source_branch'] ?? '', $matches)) {
+      $original = $this->expandSha($matches[1]);
+      if ($original && $original !== $sha) {
+        return $this->issueNumberForSha($original, $depth + 1);
+      }
+    }
+
+    return NULL;
+  }
+
+  private function issueNumberFromMergeRequest(array $merge_request): ?string {
+    // Issue fork branches are named "<issue number>-<slug>".
+    if (preg_match('/^(\d{6,})-/', $merge_request['source_branch'] ?? '', $matches)) {
+      return $matches[1];
+    }
+
+    foreach (['title', 'description'] as $field) {
+      $text = $merge_request[$field] ?? '';
+      if (preg_match('/#(\d{6,})/', $text, $matches)) {
+        return $matches[1];
+      }
+      if (preg_match('/(?:node|work_items|issues)\/(\d{6,})/', $text, $matches)) {
+        return $matches[1];
+      }
+    }
+
+    return NULL;
+  }
+
+  private function findBySha(string $sha): ?array {
+    $this->loadMergeRequests();
+    if (isset($this->bySha[$sha])) {
+      return $this->bySha[$sha];
+    }
+
+    if (!$this->commitsIndexed) {
+      $this->indexMergeRequestCommits();
+      return $this->bySha[$sha] ?? NULL;
+    }
+
+    return NULL;
+  }
+
+  private function expandSha(string $short_sha): ?string {
+    $this->loadMergeRequests();
+    foreach (array_keys($this->bySha) as $sha) {
+      if (strpos($sha, $short_sha) === 0) {
+        return $sha;
+      }
+    }
+
+    if (!$this->commitsIndexed) {
+      $this->indexMergeRequestCommits();
+      return $this->expandSha($short_sha);
+    }
+
+    return NULL;
+  }
+
+  private function loadMergeRequests(): void {
+    if ($this->mergeRequests !== NULL) {
+      return;
+    }
+
+    $this->mergeRequests = [];
+    echo "Fetching merged merge requests updated after {$this->updatedAfter}\n";
+    $page = 1;
+    while (TRUE) {
+      $url = 'https://git.drupalcode.org/api/v4/projects/' . $this->encodedProject . '/merge_requests?state=merged&updated_after=' . rawurlencode($this->updatedAfter) . '&per_page=100&page=' . $page;
+      $batch = fetch_json($url);
+      if (!is_array($batch) || !$batch) {
+        break;
+      }
+      $this->mergeRequests = array_merge($this->mergeRequests, $batch);
+      if (count($batch) < 100) {
+        break;
+      }
+      $page++;
+    }
+
+    foreach ($this->mergeRequests as $merge_request) {
+      foreach (['merge_commit_sha', 'squash_commit_sha', 'sha'] as $field) {
+        if (!empty($merge_request[$field]) && !isset($this->bySha[$merge_request[$field]])) {
+          $this->bySha[$merge_request[$field]] = $merge_request;
+        }
+      }
+    }
+    echo "Found " . count($this->mergeRequests) . " merged merge requests.\n";
+  }
+
+  private function indexMergeRequestCommits(): void {
+    $this->commitsIndexed = TRUE;
+    echo "Fetching commits of " . count($this->mergeRequests) . " merge requests, this can take a while.\n";
+    foreach ($this->mergeRequests as $merge_request) {
+      $url = 'https://git.drupalcode.org/api/v4/projects/' . $this->encodedProject . '/merge_requests/' . rawurlencode((string) $merge_request['iid']) . '/commits?per_page=100';
+      $commits = fetch_json($url);
+      if (!is_array($commits)) {
+        continue;
+      }
+      foreach ($commits as $commit) {
+        if (!empty($commit['id']) && !isset($this->bySha[$commit['id']])) {
+          $this->bySha[$commit['id']] = $merge_request;
+        }
+      }
+    }
+  }
+
 }
 
 function write_cache(array $issues, array $contributors, array $organizations): void {
